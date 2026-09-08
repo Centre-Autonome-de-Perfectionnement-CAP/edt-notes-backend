@@ -8,3 +8,4 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 require __DIR__.'/../app/Modules/Timetable/routes/api.php';
+require __DIR__.'/../app/Modules/GradeTracking/routes/api.php'; 

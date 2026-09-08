@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'qr' => [
+    'secret' => env('QR_HMAC_SECRET'),
+],
+
 ];
