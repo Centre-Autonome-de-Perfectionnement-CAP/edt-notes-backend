@@ -4,7 +4,7 @@ use App\Modules\Timetable\Http\Controllers\TimetableController;
 use App\Modules\Timetable\Http\Controllers\TimetableExportController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1/timetable')->group(function () {
+Route::prefix('v1/timetable')->middleware('auth:sanctum')->group(function () {
     Route::get('/filieres/{filiere}', [TimetableController::class, 'byFiliere']);
     Route::get('/enseignants/{enseignant}', [TimetableController::class, 'byEnseignant']);
 

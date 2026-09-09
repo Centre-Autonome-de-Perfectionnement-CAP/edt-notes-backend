@@ -30,6 +30,17 @@ class GradeSubmission extends Model
         'date_archivage' => 'datetime',
     ];
 
+    protected $hidden = ['pdf_path'];
+
+    protected $appends = ['pdf_url'];
+
+    public function getPdfUrlAttribute(): ?string
+    {
+        return $this->pdf_path
+            ? url("/api/v1/grade-tracking/submissions/{$this->id}/pdf")
+            : null;
+    }
+
     public function evaluation(): BelongsTo
     {
         return $this->belongsTo(Evaluation::class);
