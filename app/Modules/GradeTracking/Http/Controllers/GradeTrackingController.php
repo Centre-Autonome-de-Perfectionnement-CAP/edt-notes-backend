@@ -17,6 +17,8 @@ use App\Modules\GradeTracking\Events\{NoteValideeEvent, FiliereCompleteEvent};
 use Illuminate\Support\Facades\Storage;
 use App\Modules\GradeTracking\Http\Requests\ArchiveSubmissionRequest;
 use App\Modules\GradeTracking\Services\GradeRecapPdfService;
+use App\Modules\Timetable\Models\Module;
+use Illuminate\Http\Request;
 
 class GradeTrackingController extends Controller
 {
@@ -147,5 +149,45 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
 
     return response()->json($submission->fresh());
 }
+
+    public function mesModules(Request $request): JsonResponse
+    {
+        $modules = Module::where('enseignant_id', $request->user()->id)
+            ->with(['filiere', 'cycle', 'evaluations.gradeSubmission'])
+            ->get();
+
+        $data = $modules->map(function ($module) {
+            $filiereNom = $module->filiere->nom ?? '';
+            $cycleLibelle = $module->cycle->libelle ?? '';
+            $filiereAffichage = $cycleLibelle ? "{$filiereNom} — {$cycleLibelle}" : $filiereNom;
+
+            return [
+                'id' => $module->id,
+                'nom' => $module->intitule,
+                'filiere' => $filiereAffichage,
+                'evaluations' => $module->evaluations->map(function ($evaluation) {
+                    $libelles = [
+                        'devoir1' => 'Devoir 1',
+                        'devoir2' => 'Devoir 2',
+                        'examen' => 'Examen',
+                        'rattrapage' => 'Rattrapage',
+                    ];
+                    
+                    $libelle = $libelles[$evaluation->type] ?? ucfirst($evaluation->type);
+
+                    $hasSubmission = $evaluation->gradeSubmission !== null;
+
+                    return [
+                        'id' => $evaluation->id,
+                        'libelle' => $libelle,
+                        'statut' => $hasSubmission ? 'verrouille' : 'non_commence',
+                        'submission_id' => $hasSubmission ? $evaluation->gradeSubmission->id : null,
+                    ];
+                })->values()->all(),
+            ];
+        });
+
+        return response()->json(['data' => $data]);
+    }
 
 }

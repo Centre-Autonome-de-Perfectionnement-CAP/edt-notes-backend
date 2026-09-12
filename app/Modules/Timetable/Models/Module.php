@@ -43,4 +43,9 @@ class Module extends Model
     {
         return $this->hasMany(Seance::class);
     }
+
+    public function evaluations(): HasMany
+    {
+        return $this->hasMany(\App\Modules\GradeTracking\Models\Evaluation::class);
+    }
 }

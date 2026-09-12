@@ -25,8 +25,15 @@ class SubmitNotesRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'notes.required' => 'Les notes sont requises.',
+            'notes.array' => 'Les notes doivent être un tableau.',
+            'notes.*.etudiant_id.required' => "L'étudiant est requis.",
+            'notes.*.etudiant_id.integer' => "L'étudiant doit être un entier.",
             'notes.*.etudiant_id.exists' => "Un des étudiants envoyés n'existe pas.",
+            'notes.*.valeur.numeric' => 'La note doit être un nombre.',
+            'notes.*.valeur.min' => 'Une note ne peut pas être inférieure à 0.',
             'notes.*.valeur.max' => "Une note ne peut pas dépasser 20.",
+            'notes.*.absent.boolean' => "Le champ absent doit être un booléen.",
         ];
     }
 

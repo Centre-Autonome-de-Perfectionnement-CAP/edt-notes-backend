@@ -59,6 +59,22 @@ class TimetableController extends Controller
     }
 
     /**
+     * GET /api/v1/timetable/filieres/{filiere}/modules
+     */
+    public function modulesByFiliere(int $filiere): JsonResponse
+    {
+        return response()->json(['data' => Module::where('filiere_id', $filiere)->get(['id', 'intitule'])]);
+    }
+
+    /**
+     * GET /api/v1/timetable/enseignants
+     */
+    public function enseignants(): JsonResponse
+    {
+        return response()->json(['data' => User::where('role', 'enseignant')->get(['id', 'name'])]);
+    }
+
+    /**
      * POST /api/v1/timetable/modules
      */
     public function storeModule(Request $request): JsonResponse

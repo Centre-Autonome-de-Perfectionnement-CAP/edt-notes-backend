@@ -5,6 +5,7 @@ use App\Modules\GradeTracking\Http\Controllers\GradeTrackingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/grade-tracking')->middleware('auth:sanctum')->group(function () {
+    Route::get('/mes-modules', [GradeTrackingController::class, 'mesModules']);
     Route::get('/evaluations/{evaluation}/roster', [GradeTrackingController::class, 'roster']);
     Route::post('/evaluations/{evaluation}/notes', [GradeTrackingController::class, 'submitNotes']);
     Route::get('/filieres/{filiere}/status', [GradeTrackingController::class, 'filiereStatus']);

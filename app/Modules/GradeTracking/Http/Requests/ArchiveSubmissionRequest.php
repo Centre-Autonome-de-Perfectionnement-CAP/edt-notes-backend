@@ -18,4 +18,12 @@ class ArchiveSubmissionRequest extends FormRequest
             'hash' => ['required', 'string'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'hash.required' => 'Le hash est requis.',
+            'hash.string' => 'Le hash doit être une chaîne de caractères.',
+        ];
+    }
 }

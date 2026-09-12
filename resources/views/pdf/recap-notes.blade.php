@@ -23,9 +23,9 @@
         {{ $submission->evaluation->module->filiere->nom }}
     </p>
 
-    <p>
+    <p style="line-height: 1.7;">
         <strong>Enseignant :</strong> {{ $submission->enseignant->name }}<br>
-        <strong>Date de soumission :</strong> {{ $submission->date_soumission->format('d/m/Y H:i') }}
+        <strong>Date de soumission :</strong> {{ $dateSoumissionFormatee }}
     </p>
 
     <table>
@@ -52,7 +52,7 @@
     </table>
 
     <div class="qr-bloc">
-        {!! $qrCodeSvg !!}
+        <img src="data:image/svg+xml;base64,{{ $qrBase64 }}" width="150" height="150">
         <p>À imprimer et joindre à l'enveloppe scellée — Soumission n°{{ $submission->id }}</p>
     </div>
 </body>

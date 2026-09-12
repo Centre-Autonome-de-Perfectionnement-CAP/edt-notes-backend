@@ -16,20 +16,25 @@ class GradeRecapPdfService
 
         $notes = $submission->evaluation->notes()
             ->with('etudiant')
-            ->orderBy('etudiant_id')
-            ->get();
+            ->get()
+            ->sortBy(fn ($note) => $note->etudiant->nom)
+            ->values();
 
         $qrPayload = json_encode([
             'submission_id' => $submission->id,
             'hash' => $submission->qr_hash,
         ]);
 
-        $qrCodeSvg = QrCode::size(150)->generate($qrPayload);
+        $qrSvg = QrCode::format('svg')->size(150)->generate($qrPayload);
+        $qrBase64 = base64_encode($qrSvg);
+
+        $dateSoumissionFormatee = $submission->date_soumission->setTimezone('Africa/Porto-Novo')->format('d/m/Y H:i');
 
         $pdf = Pdf::loadView('pdf.recap-notes', [
             'submission' => $submission,
             'notes' => $notes,
-            'qrCodeSvg' => $qrCodeSvg,
+            'qrBase64' => $qrBase64,
+            'dateSoumissionFormatee' => $dateSoumissionFormatee,
         ]);
 
         $path = "grade-recaps/{$submission->evaluation_id}_{$submission->id}.pdf";
