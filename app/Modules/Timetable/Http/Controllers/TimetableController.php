@@ -17,6 +17,14 @@ use App\Modules\Timetable\Models\EmploiDuTemps;
 class TimetableController extends Controller
 {
     /**
+     * GET /api/v1/timetable/filieres
+     */
+    public function filieres(): JsonResponse
+    {
+        return response()->json(['data' => Filiere::all(['id', 'nom'])]);
+    }
+
+    /**
      * GET /api/v1/timetable/filieres/{filiere_id}
      */
     public function byFiliere(Request $request, int $filiere): JsonResponse
@@ -145,7 +153,7 @@ class TimetableController extends Controller
      */
     public function destroySeance(Seance $seance): JsonResponse
     {
-        $seance->update(['statut' => 'annule']);
+        $seance->delete();
 
         event(new SeanceProgrammeeEvent($seance, 'cancelled'));
 
