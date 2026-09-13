@@ -10,6 +10,7 @@ Route::prefix('v1/timetable')->middleware('auth:sanctum')->group(function () {
     Route::get('/filieres/{filiere}/modules', [TimetableController::class, 'modulesByFiliere']);
     Route::get('/enseignants', [TimetableController::class, 'enseignants']);
     Route::get('/enseignants/{enseignant}', [TimetableController::class, 'byEnseignant']);
+    Route::get('/seances', [TimetableController::class, 'allSeances']);
 
     Route::post('/modules', [TimetableController::class, 'storeModule']);
 

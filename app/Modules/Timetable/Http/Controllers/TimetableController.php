@@ -21,7 +21,7 @@ class TimetableController extends Controller
      */
     public function filieres(): JsonResponse
     {
-        return response()->json(['data' => Filiere::all(['id', 'nom'])]);
+        return response()->json(['data' => Filiere::all(['id', 'nom', 'code'])]);
     }
 
     /**
@@ -33,7 +33,24 @@ class TimetableController extends Controller
             return response()->json(['message' => 'Filière introuvable.'], 404);
         }
 
-        $query = Seance::forFiliere($filiere)->with(['module', 'enseignant']);
+        $query = Seance::forFiliere($filiere)->with(['module.filiere', 'enseignant']);
+
+        if ($request->filled('date_debut')) {
+            $query->where('date', '>=', $request->date('date_debut')->toDateString());
+        }
+        if ($request->filled('date_fin')) {
+            $query->where('date', '<=', $request->date('date_fin')->toDateString());
+        }
+
+        return response()->json(['data' => $query->orderBy('date')->orderBy('heure_debut')->get()]);
+    }
+
+    /**
+     * GET /api/v1/timetable/seances
+     */
+    public function allSeances(Request $request): JsonResponse
+    {
+        $query = Seance::with(['module.filiere', 'enseignant']);
 
         if ($request->filled('date_debut')) {
             $query->where('date', '>=', $request->date('date_debut')->toDateString());
@@ -118,7 +135,7 @@ class TimetableController extends Controller
 
         event(new SeanceProgrammeeEvent($seance, 'created')); // branché à l'étape suivante (diffusion temps réel)
 
-        return response()->json(['data' => $seance->load(['module', 'enseignant'])], 201);
+        return response()->json(['data' => $seance->load(['module.filiere', 'enseignant'])], 201);
     }
 
     /**
@@ -144,7 +161,7 @@ class TimetableController extends Controller
 
         event(new SeanceProgrammeeEvent($seance, 'updated'));
 
-        return response()->json(['data' => $seance->fresh(['module', 'enseignant'])]);
+        return response()->json(['data' => $seance->fresh(['module.filiere', 'enseignant'])]);
     }
 
     /**
