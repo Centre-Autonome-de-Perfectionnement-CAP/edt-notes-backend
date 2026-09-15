@@ -117,6 +117,23 @@ class TimetableController extends Controller
     }
 
     /**
+     * PATCH /api/v1/timetable/modules/{module}/couleur
+     */
+    public function updateCouleur(Request $request, Module $module): JsonResponse
+    {
+        $validated = $request->validate([
+            'couleur' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+        ]);
+
+        $module->update(['couleur' => $validated['couleur']]);
+
+        return response()->json([
+            'data' => $module->fresh(['filiere', 'cycle', 'enseignant']),
+            'message' => 'Couleur du module mise à jour.',
+        ]);
+    }
+
+    /**
      * POST /api/v1/timetable/seances
      * Réservé au rôle responsable pédagogique.
      */
@@ -210,8 +227,59 @@ class TimetableController extends Controller
             'contact_responsable_tel' => ['nullable', 'string', 'max:50'],
         ]);
 
+        $sansTelephone = User::whereIn(
+            'id',
+            Module::where('filiere_id', $validated['filiere_id'])
+                ->whereNotNull('enseignant_id')
+                ->pluck('enseignant_id')
+        )
+            ->whereNull('telephone')
+            ->pluck('name');
+
+        if ($sansTelephone->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Numéro manquant pour : ' . $sansTelephone->implode(', ') . '. Complétez les fiches enseignants avant de générer.',
+            ], 422);
+        }
+
         $emploiDuTemps = EmploiDuTemps::create($validated + ['division' => $validated['division'] ?? 'RdivFC']);
 
         return response()->json(['data' => $emploiDuTemps->load('filiere')], 201);
+    }
+
+    /**
+     * GET /api/v1/timetable/emploi-du-temps
+     * Liste les emplois du temps générés.
+     */
+    public function listEmploiDuTemps(Request $request): JsonResponse
+    {
+        $query = EmploiDuTemps::with('filiere');
+
+        if ($request->filled('filiere_id')) {
+            $query->where('filiere_id', $request->integer('filiere_id'));
+        }
+
+        return response()->json(['data' => $query->latest('date_debut_semaine')->get()]);
+    }
+
+    /**
+     * GET /api/v1/timetable/emploi-du-temps/latest
+     * Récupère le dernier emploi du temps pour une filière (ou global).
+     */
+    public function latestEmploiDuTemps(Request $request): JsonResponse
+    {
+        $query = EmploiDuTemps::with('filiere');
+
+        if ($request->filled('filiere_id')) {
+            $query->where('filiere_id', $request->integer('filiere_id'));
+        }
+
+        $latest = $query->latest('date_debut_semaine')->first();
+
+        if (! $latest) {
+            return response()->json(['message' => 'Aucun emploi du temps trouvé.'], 404);
+        }
+
+        return response()->json(['data' => $latest]);
     }
 }

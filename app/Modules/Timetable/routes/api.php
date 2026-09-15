@@ -12,12 +12,19 @@ Route::prefix('v1/timetable')->middleware('auth:sanctum')->group(function () {
     Route::get('/enseignants/{enseignant}', [TimetableController::class, 'byEnseignant']);
     Route::get('/seances', [TimetableController::class, 'allSeances']);
 
-    Route::post('/modules', [TimetableController::class, 'storeModule']);
+    Route::middleware('role.responsable')->group(function () {
+        Route::post('/modules', [TimetableController::class, 'storeModule']);
+        Route::patch('/modules/{module}/couleur', [TimetableController::class, 'updateCouleur']);
 
-    Route::post('/seances', [TimetableController::class, 'storeSeance']);
-    Route::put('/seances/{seance}', [TimetableController::class, 'updateSeance']);
-    Route::delete('/seances/{seance}', [TimetableController::class, 'destroySeance']);
+        Route::post('/seances', [TimetableController::class, 'storeSeance']);
+        Route::put('/seances/{seance}', [TimetableController::class, 'updateSeance']);
+        Route::delete('/seances/{seance}', [TimetableController::class, 'destroySeance']);
 
-    Route::post('/emploi-du-temps', [TimetableController::class, 'storeEmploiDuTemps']);
+        Route::post('/emploi-du-temps', [TimetableController::class, 'storeEmploiDuTemps']);
+    });
+
+    Route::get('/emploi-du-temps', [TimetableController::class, 'listEmploiDuTemps']);
+    Route::get('/emploi-du-temps/latest', [TimetableController::class, 'latestEmploiDuTemps']);
     Route::get('/emploi-du-temps/{emploiDuTemps}/export', [TimetableExportController::class, 'export']);
+    Route::get('/emploi-du-temps/{emploiDuTemps}/export-csv', [TimetableExportController::class, 'exportCsv']);
 });

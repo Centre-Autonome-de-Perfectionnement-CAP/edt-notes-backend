@@ -14,7 +14,16 @@ class Module extends Model
 {
     use HasFactory;
 
-    protected $table = 'modules';
+    public const PALETTE_COULEURS = [
+        '#3B82F6', // Bleu
+        '#10B981', // Vert
+        '#F59E0B', // Jaune / Ambre
+        '#EF4444', // Rouge
+        '#8B5CF6', // Violet
+        '#EC4899', // Rose
+        '#06B6D4', // Cyan
+        '#F97316', // Orange
+    ];
 
     protected $fillable = [
         'filiere_id',
@@ -22,7 +31,20 @@ class Module extends Model
         'intitule',
         'volume_horaire',
         'enseignant_id',
+        'couleur',
     ];
+
+    public function getCouleurAttribute(?string $value): string
+    {
+        if ($value !== null && $value !== '') {
+            return $value;
+        }
+
+        $id = $this->id ?? 0;
+        $index = abs($id % 8);
+
+        return self::PALETTE_COULEURS[$index];
+    }
 
     public function filiere(): BelongsTo
     {
