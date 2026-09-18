@@ -8,12 +8,14 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens ,HasFactory, Notifiable;
@@ -45,5 +47,10 @@ public function isSecretariat(): bool
 public function isResponsablePedagogique(): bool
 {
     return $this->role === 'responsable_pedagogique';
+}
+
+public function canAccessPanel(Panel $panel): bool
+{
+    return $this->is_admin === true;
 }
 }
