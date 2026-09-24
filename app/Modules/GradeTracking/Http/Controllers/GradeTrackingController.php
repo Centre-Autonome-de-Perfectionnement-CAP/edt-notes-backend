@@ -4,11 +4,13 @@
 namespace App\Modules\GradeTracking\Http\Controllers;
 
 use App\Models\Etudiant;
+use App\Models\Filiere;
 use App\Modules\GradeTracking\Http\Requests\SubmitNotesRequest;
 use App\Modules\GradeTracking\Models\Evaluation;
 use App\Modules\GradeTracking\Models\GradeSubmission;
 use App\Modules\GradeTracking\Models\Note;
 use App\Modules\GradeTracking\Services\QrCodeService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Routing\Controller;
@@ -190,4 +192,137 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
         return response()->json(['data' => $data]);
     }
 
+    /**
+     * GET /api/v1/grade-tracking/delegue/notes
+     * Permet au responsable de classe (délégué) de consulter les notes des matières
+     * de sa filière avec application du délai de rétention de 2 jours (48h) post-dépôt.
+     */
+    public function delegueNotes(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $filiereId = $user->filiere_id ?? $request->query('filiere_id');
+
+        if (! $filiereId) {
+            return response()->json([
+                'message' => 'Aucune filière associée à ce compte responsable de classe.',
+            ], 400);
+        }
+
+        $filiere = Filiere::find($filiereId);
+        if (! $filiere) {
+            return response()->json(['message' => 'Filière introuvable.'], 404);
+        }
+
+        $modules = Module::where('filiere_id', $filiereId)
+            ->with([
+                'enseignant',
+                'evaluations.gradeSubmission',
+                'evaluations.notes.etudiant',
+            ])
+            ->get();
+
+        $modulesData = $modules->map(function ($module) {
+            return [
+                'id' => $module->id,
+                'intitule' => $module->intitule,
+                'volume_horaire' => $module->volume_horaire,
+                'enseignant' => $module->enseignant ? [
+                    'id' => $module->enseignant->id,
+                    'nom' => $module->enseignant->name,
+                    'telephone' => $module->enseignant->telephone,
+                ] : null,
+                'evaluations' => $module->evaluations->map(function ($evaluation) {
+                    $submission = $evaluation->gradeSubmission;
+                    $libelles = [
+                        'devoir1' => 'Devoir 1',
+                        'devoir2' => 'Devoir 2',
+                        'examen' => 'Examen',
+                        'rattrapage' => 'Rattrapage',
+                    ];
+                    $libelle = $libelles[$evaluation->type] ?? ucfirst($evaluation->type);
+
+                    if (! $submission) {
+                        return [
+                            'id' => $evaluation->id,
+                            'type' => $evaluation->type,
+                            'libelle' => $libelle,
+                            'statut' => 'non_soumis',
+                            'libelle_statut' => 'Notes non encore renseignées par l\'enseignant',
+                            'delai_ecoule' => false,
+                            'date_soumission' => null,
+                            'date_ouverture' => null,
+                            'heures_restantes' => null,
+                            'notes' => [],
+                            'statistiques' => null,
+                        ];
+                    }
+
+                    $dateSoumission = Carbon::parse($submission->date_soumission);
+                    $dateOuverture = $dateSoumission->copy()->addDays(2);
+                    $delaiEcoule = now()->greaterThanOrEqualTo($dateOuverture);
+
+                    if (! $delaiEcoule) {
+                        $heuresRestantes = max(1, (int) ceil(now()->diffInHours($dateOuverture, false)));
+                        return [
+                            'id' => $evaluation->id,
+                            'type' => $evaluation->type,
+                            'libelle' => $libelle,
+                            'statut' => 'en_attente_delai',
+                            'libelle_statut' => 'En attente du délai de 2 jours post-dépôt',
+                            'delai_ecoule' => false,
+                            'date_soumission' => $dateSoumission->toIso8601String(),
+                            'date_ouverture' => $dateOuverture->toIso8601String(),
+                            'heures_restantes' => $heuresRestantes,
+                            'notes' => [],
+                            'statistiques' => null,
+                        ];
+                    }
+
+                    $notesCollection = $evaluation->notes->map(function ($note) {
+                        return [
+                            'etudiant_id' => $note->etudiant_id,
+                            'matricule' => $note->etudiant->matricule ?? '',
+                            'nom_complet' => trim(($note->etudiant->nom ?? '') . ' ' . ($note->etudiant->prenoms ?? '')),
+                            'valeur' => $note->valeur !== null ? (float) $note->valeur : null,
+                            'absent' => (bool) $note->absent,
+                        ];
+                    })->sortBy('nom_complet')->values();
+
+                    $notesPresentes = $notesCollection->where('absent', false)->pluck('valeur')->filter(fn ($v) => $v !== null);
+
+                    $stats = [
+                        'total_etudiants' => $notesCollection->count(),
+                        'total_presents' => $notesPresentes->count(),
+                        'total_absents' => $notesCollection->where('absent', true)->count(),
+                        'moyenne' => $notesPresentes->count() > 0 ? round($notesPresentes->avg(), 2) : null,
+                        'note_min' => $notesPresentes->count() > 0 ? (float) $notesPresentes->min() : null,
+                        'note_max' => $notesPresentes->count() > 0 ? (float) $notesPresentes->max() : null,
+                    ];
+
+                    return [
+                        'id' => $evaluation->id,
+                        'type' => $evaluation->type,
+                        'libelle' => $libelle,
+                        'statut' => 'disponible',
+                        'libelle_statut' => 'Notes publiées et consultables',
+                        'delai_ecoule' => true,
+                        'date_soumission' => $dateSoumission->toIso8601String(),
+                        'date_ouverture' => $dateOuverture->toIso8601String(),
+                        'heures_restantes' => 0,
+                        'statistiques' => $stats,
+                        'notes' => $notesCollection->all(),
+                    ];
+                })->values()->all(),
+            ];
+        });
+
+        return response()->json([
+            'filiere' => [
+                'id' => $filiere->id,
+                'nom' => $filiere->nom,
+                'code' => $filiere->code,
+            ],
+            'data' => $modulesData,
+        ]);
+    }
 }

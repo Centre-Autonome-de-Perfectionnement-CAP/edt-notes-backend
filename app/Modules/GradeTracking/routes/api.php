@@ -11,5 +11,6 @@ Route::prefix('v1/grade-tracking')->middleware('auth:sanctum')->group(function (
     Route::get('/filieres/{filiere}/status', [GradeTrackingController::class, 'filiereStatus']);
     Route::get('/dashboard', [GradeTrackingController::class, 'dashboard']);
     Route::get('/submissions/{submission}/pdf', [GradeTrackingController::class, 'downloadPdf']);
-Route::patch('/submissions/{submission}/archive', [GradeTrackingController::class, 'archive']);
+    Route::patch('/submissions/{submission}/archive', [GradeTrackingController::class, 'archive']);
+    Route::get('/delegue/notes', [GradeTrackingController::class, 'delegueNotes']);
 });

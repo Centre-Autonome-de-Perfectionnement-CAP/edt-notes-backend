@@ -22,6 +22,7 @@ Ce système répond à deux problématiques majeures :
    - Export PDF récapitulatif avec QR code sécurisé.
    - Archivage physique avec confirmation par scan QR réservé au secrétariat.
    - Tableau de bord pour le responsable pédagogique.
+   - **Interface Délégué (Responsable de classe)** : consultation des notes de sa filière avec **règle de rétention/recours de 48h** (déverrouillage automatique avec décompte).
 
 ---
 
@@ -29,11 +30,11 @@ Ce système répond à deux problématiques majeures :
 
 | Composant | Choix | Rôle & Justification |
 |---|---|---|
-| **Framework** | Laravel 12 (PHP 8.2+) | Architecture modulaire (pp/Modules/Timetable, pp/Modules/GradeTracking) |
+| **Framework** | Laravel 12 (PHP 8.2+) | Architecture modulaire (`app/Modules/Timetable`, `app/Modules/GradeTracking`) |
 | **Authentification** | Laravel Sanctum | Protection des endpoints API par token Bearer et RBAC |
 | **Temps réel** | Laravel Reverb | WebSockets natifs haute performance (canaux privés par filière) |
-| **Génération PDF** | arryvdh/laravel-dompdf | Grille A4 paysage dynamique et fiches récapitulatives avec QR |
-| **Tests automatisés** | PHPUnit | Suite complète de 23 tests automatisés |
+| **Génération PDF** | `barryvdh/laravel-dompdf` | Grille A4 paysage dynamique et fiches récapitulatives avec QR |
+| **Tests automatisés** | PHPUnit | Suite complète de 25 tests automatisés |
 
 ---
 
@@ -46,7 +47,7 @@ Ce système répond à deux problématiques majeures :
 
 ### 3.2 Commandes d'installation
 
-`ash
+```bash
 # 1. Cloner le projet
 git clone https://github.com/Centre-Autonome-de-Perfectionnement-CAP/edt-notes-backend.git
 cd edt-notes-backend
@@ -60,55 +61,61 @@ php artisan key:generate
 
 # 4. Migrations & Seeders
 php artisan migrate
-php artisan db:seed --class=TimetableSeeder
+php artisan db:seed
 
 # 5. Lancer les 3 processus nécessaires en développement
 php artisan serve            # Serveur API HTTP (Port 8000)
 php artisan reverb:start     # Serveur WebSocket Reverb (Port 8080)
 php artisan queue:work       # Worker de diffusion des événements broadcast
-`
+```
 
 ---
 
-## 4. Endpoints API — Module Timetable
+## 4. Endpoints API
 
-Base URL : /api/v1/timetable (Authentification requise : uth:sanctum)
+Base URL : `/api/v1` (Authentification requise : `auth:sanctum`)
 
-### 4.1 Consultation (Accessible à tous les rôles)
+### 4.1 Module Timetable — Consultation (Tous rôles)
 | Méthode | Route | Description |
 |---|---|---|
-| GET | /filieres | Liste des filières disponibles |
-| GET | /filieres/{id} | Séances d'une filière (date_debut, date_fin en filtres) |
-| GET | /filieres/{id}/modules | Modules d'une filière |
-| GET | /enseignants | Liste des enseignants |
-| GET | /enseignants/{id} | Séances programmées pour un enseignant |
-| GET | /seances | Toutes les séances |
-| GET | /emploi-du-temps | Liste des emplois du temps hebdomadaires générés |
-| GET | /emploi-du-temps/latest | Dernier emploi du temps généré pour une filière |
+| GET | `/api/v1/timetable/filieres` | Liste des filières disponibles |
+| GET | `/api/v1/timetable/filieres/{id}` | Séances d'une filière (`date_debut`, `date_fin` en filtres) |
+| GET | `/api/v1/timetable/filieres/{id}/modules` | Modules d'une filière |
+| GET | `/api/v1/timetable/enseignants` | Liste des enseignants |
+| GET | `/api/v1/timetable/enseignants/{id}` | Séances programmées pour un enseignant |
+| GET | `/api/v1/timetable/seances` | Toutes les séances |
+| GET | `/api/v1/timetable/emploi-du-temps` | Liste des emplois du temps hebdomadaires générés |
+| GET | `/api/v1/timetable/emploi-du-temps/latest` | Dernier emploi du temps généré pour une filière |
 
-### 4.2 Programmation & Gestion (Réservé au esponsable_pedagogique via ole.responsable)
+### 4.2 Module Timetable — Programmation (Réservé `responsable_pedagogique`)
 | Méthode | Route | Description |
 |---|---|---|
-| POST | /modules | Création d'un module d'enseignement |
-| PATCH | /modules/{id}/couleur | Mise à jour de la couleur du module (palette 8 teintes) |
-| POST | /seances | Programmation d'une séance (détection de conflit 409) |
-| PUT | /seances/{id} | Modification / report d'une séance |
-| DELETE | /seances/{id} | Annulation logique de séance (statut = annule) |
-| POST | /emploi-du-temps | Création de l'en-tête (validation des numéros de tél. 422) |
+| POST | `/api/v1/timetable/modules` | Création d'un module d'enseignement |
+| PATCH | `/api/v1/timetable/modules/{id}/couleur` | Mise à jour de la couleur du module (palette 8 teintes) |
+| POST | `/api/v1/timetable/seances` | Programmation d'une séance (détection de conflit 409) |
+| PUT | `/api/v1/timetable/seances/{id}` | Modification / report d'une séance |
+| DELETE | `/api/v1/timetable/seances/{id}` | Annulation logique de séance (`statut = annule`) |
+| POST | `/api/v1/timetable/emploi-du-temps` | Création de l'en-tête (validation des numéros de tél. 422) |
+| PATCH | `/api/v1/timetable/enseignants/{id}/telephone` | Mise à jour rapide du téléphone d'un enseignant |
 
-### 4.3 Exports Officiels (Accessible à tous les rôles)
+### 4.3 Module Timetable — Exports Officiels (Tous rôles)
 | Méthode | Route | Description |
 |---|---|---|
-| GET | /emploi-du-temps/{id}/export | Génération du flux PDF officiel A4 paysage |
-| GET | /emploi-du-temps/{id}/export-csv | Export du flux CSV plat avec en-têtes et BOM UTF-8 |
+| GET | `/api/v1/timetable/emploi-du-temps/{id}/export` | Génération du flux PDF officiel A4 paysage dynamique |
+| GET | `/api/v1/timetable/emploi-du-temps/{id}/export-csv` | Export du flux CSV plat avec en-têtes et BOM UTF-8 |
+
+### 4.4 Module GradeTracking — Délégué / Responsable de Classe
+| Méthode | Route | Description |
+|---|---|---|
+| GET | `/api/v1/grade-tracking/delegue/notes` | Consultation des notes de la filière avec application stricte de la règle de rétention des 48h (statut `disponible` avec notes et stats si > 48h, statut `en_attente_delai` avec décompte si < 48h). |
 
 ---
 
 ## 5. Diffusion Temps Réel (Laravel Reverb)
 
-- **Canal privé par filière** : private-filiere.{filiere_id}.timetable
-- **Événement** : SeanceProgrammeeEvent (roadcastAs: seance.programmee)
-- **Actions diffusées** : created, updated, cancelled
+- **Canal privé par filière** : `private-filiere.{filiere_id}.timetable`
+- **Événement** : `SeanceProgrammeeEvent` (`broadcastAs: seance.programmee`)
+- **Actions diffusées** : `created`, `updated`, `cancelled`
 
 ---
 
@@ -116,8 +123,8 @@ Base URL : /api/v1/timetable (Authentification requise : uth:sanctum)
 
 Pour exécuter la suite complète de tests backend :
 
-`ash
+```bash
 php artisan test
-`
+```
 
-Résultat : **23 / 23 tests passés avec succès** (79 assertions).
+Résultat : **25 / 25 tests passés avec succès** (94 assertions).

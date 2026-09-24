@@ -227,13 +227,27 @@ class TimetableController extends Controller
             'contact_responsable_tel' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $sansTelephone = User::whereIn(
-            'id',
-            Module::where('filiere_id', $validated['filiere_id'])
+        $dateDebut = \Carbon\Carbon::parse($validated['date_debut_semaine'])->toDateString();
+        $dateFin = \Carbon\Carbon::parse($validated['date_fin_semaine'])->toDateString();
+
+        $enseignantIds = Seance::forFiliere($validated['filiere_id'])
+            ->whereBetween('date', [$dateDebut, $dateFin])
+            ->where('statut', '!=', 'annule')
+            ->pluck('enseignant_id')
+            ->filter()
+            ->unique();
+
+        if ($enseignantIds->isEmpty()) {
+            $enseignantIds = Module::where('filiere_id', $validated['filiere_id'])
                 ->whereNotNull('enseignant_id')
                 ->pluck('enseignant_id')
-        )
-            ->whereNull('telephone')
+                ->unique();
+        }
+
+        $sansTelephone = User::whereIn('id', $enseignantIds)
+            ->where(function ($q) {
+                $q->whereNull('telephone')->orWhere('telephone', '');
+            })
             ->pluck('name');
 
         if ($sansTelephone->isNotEmpty()) {
@@ -245,6 +259,24 @@ class TimetableController extends Controller
         $emploiDuTemps = EmploiDuTemps::create($validated + ['division' => $validated['division'] ?? 'RdivFC']);
 
         return response()->json(['data' => $emploiDuTemps->load('filiere')], 201);
+    }
+
+    /**
+     * PATCH /api/v1/timetable/enseignants/{id}/telephone
+     * Permet au responsable de mettre à jour le numéro de téléphone d'un enseignant.
+     */
+    public function updateEnseignantPhone(Request $request, User $enseignant): JsonResponse
+    {
+        $validated = $request->validate([
+            'telephone' => ['required', 'string', 'max:50'],
+        ]);
+
+        $enseignant->update(['telephone' => $validated['telephone']]);
+
+        return response()->json([
+            'message' => 'Numéro de téléphone mis à jour avec succès.',
+            'data' => $enseignant->fresh(),
+        ]);
     }
 
     /**

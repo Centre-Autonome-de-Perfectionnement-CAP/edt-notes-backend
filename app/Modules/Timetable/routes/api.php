@@ -21,6 +21,7 @@ Route::prefix('v1/timetable')->middleware('auth:sanctum')->group(function () {
         Route::delete('/seances/{seance}', [TimetableController::class, 'destroySeance']);
 
         Route::post('/emploi-du-temps', [TimetableController::class, 'storeEmploiDuTemps']);
+        Route::patch('/enseignants/{enseignant}/telephone', [TimetableController::class, 'updateEnseignantPhone']);
     });
 
     Route::get('/emploi-du-temps', [TimetableController::class, 'listEmploiDuTemps']);

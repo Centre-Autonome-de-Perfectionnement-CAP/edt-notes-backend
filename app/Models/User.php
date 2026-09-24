@@ -11,7 +11,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'role', 'telephone'])]
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+#[Fillable(['name', 'email', 'password', 'role', 'telephone', 'filiere_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -28,22 +30,32 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'role',
+            'filiere_id' => 'integer',
         ];
     }
 
+    public function filiere(): BelongsTo
+    {
+        return $this->belongsTo(Filiere::class);
+    }
+
     public function isEnseignant(): bool
-{
-    return $this->role === 'enseignant';
-}
+    {
+        return $this->role === 'enseignant';
+    }
 
-public function isSecretariat(): bool
-{
-    return $this->role === 'secretariat';
-}
+    public function isSecretariat(): bool
+    {
+        return $this->role === 'secretariat';
+    }
 
-public function isResponsablePedagogique(): bool
-{
-    return $this->role === 'responsable_pedagogique';
-}
+    public function isResponsablePedagogique(): bool
+    {
+        return $this->role === 'responsable_pedagogique';
+    }
+
+    public function isDelegue(): bool
+    {
+        return $this->role === 'delegue';
+    }
 }

@@ -12,14 +12,12 @@ use App\Modules\GradeTracking\Models\Note;
 use App\Modules\GradeTracking\Services\QrCodeService;
 use App\Modules\Timetable\Models\Module;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class GradeTrackingSeeder extends Seeder
 {
     public function run(): void
     {
-        // 0. Comptes de test avec rôle — le UserFactory ne pose pas de rôle
-        //    par défaut, donc les enseignants créés par TimetableSeeder ont
-        //    role = null tant qu'on ne le corrige pas ici.
         $modules = Module::with('filiere')->get();
 
         if ($modules->isEmpty()) {
@@ -28,25 +26,48 @@ class GradeTrackingSeeder extends Seeder
         }
 
         $modules->pluck('enseignant_id')->unique()->each(
-            fn ($id) => User::whereKey($id)->update(['role' => 'enseignant'])
+            fn ($id) => User::whereKey($id)->update([
+                'role' => 'enseignant',
+                'telephone' => '+229 97 ' . fake()->numerify('## ## ##'),
+            ])
         );
 
-        $secretaire = User::factory()->create([
-            'name' => 'Secrétariat CAP',
-            'email' => 'secretariat@cap.test',
-            'role' => 'secretariat',
-        ]);
+        $secretariat = User::firstOrCreate(
+            ['email' => 'secretariat@cap.test'],
+            [
+                'name' => 'Secrétariat CAP',
+                'password' => Hash::make('password'),
+                'role' => 'secretariat',
+                'telephone' => '+229 97 00 00 00',
+            ]
+        );
 
-        User::factory()->create([
-            'name' => 'Responsable Pédagogique',
-            'email' => 'responsable@cap.test',
-            'role' => 'responsable_pedagogique',
-        ]);
+        User::firstOrCreate(
+            ['email' => 'responsable@cap.test'],
+            [
+                'name' => 'Responsable Pédagogique',
+                'password' => Hash::make('password'),
+                'role' => 'responsable_pedagogique',
+                'telephone' => '+229 97 00 00 99',
+            ]
+        );
 
-        // 1. Étudiants — 6 par filière
+        // 1. Étudiants & Délégué par filière
         $filieres = Filiere::all();
 
         foreach ($filieres as $filiere) {
+            // Créer un délégué (responsable de classe) pour la filière
+            User::firstOrCreate(
+                ['email' => 'delegue.' . strtolower($filiere->code) . '@cap.test'],
+                [
+                    'name' => 'Délégué ' . $filiere->nom,
+                    'password' => Hash::make('password'),
+                    'role' => 'delegue',
+                    'filiere_id' => $filiere->id,
+                    'telephone' => '+229 97 ' . fake()->numerify('## ## ##'),
+                ]
+            );
+
             for ($i = 1; $i <= 6; $i++) {
                 Etudiant::firstOrCreate(
                     ['matricule' => sprintf('%s-%03d', $filiere->code, $i)],
@@ -63,87 +84,84 @@ class GradeTrackingSeeder extends Seeder
         foreach ($modules as $module) {
             Evaluation::firstOrCreate(
                 ['module_id' => $module->id, 'type' => 'devoir1'],
-                ['libelle' => 'Devoir 1 — '.$module->intitule, 'date_prevue' => now()->subDays(10)]
+                ['libelle' => 'Devoir 1 — ' . $module->intitule, 'date_prevue' => now()->subDays(10)]
             );
             Evaluation::firstOrCreate(
                 ['module_id' => $module->id, 'type' => 'examen'],
-                ['libelle' => 'Examen — '.$module->intitule, 'date_prevue' => now()->subDays(3)]
+                ['libelle' => 'Examen — ' . $module->intitule, 'date_prevue' => now()->subDays(3)]
             );
         }
 
-        // 3. États volontairement différents selon la filière, pour tester
-        //    les 3 couleurs du dashboard (vert/orange/rouge) sans avoir à
-        //    soumettre quoi que ce soit manuellement.
-        $qrCodeService = app(QrCodeService::class);
-        $filieresIndexees = $filieres->values();
+        $qrService = app(QrCodeService::class);
+        $modulesList = $modules->values();
 
-        foreach ($modules as $module) {
-            $indexFiliere = $filieresIndexees->search(fn ($f) => $f->id === $module->filiere_id);
+        foreach ($modulesList as $module) {
+            $filiereIndex = $filieres->search(fn ($f) => $f->id === $module->filiere_id);
             $evaluations = Evaluation::where('module_id', $module->id)->get();
 
-            foreach ($evaluations as $i => $evaluation) {
-                // Filière 0 → tout soumis (vert). Filière 1 → un devoir sur deux (orange).
-                // Filière 2+ → rien de soumis (rouge).
-                $doitEtreSoumis = match ($indexFiliere) {
-                    0 => true,
-                    1 => $i === 0,
-                    default => false,
-                };
-
-                if (! $doitEtreSoumis) {
-                    continue;
+            foreach ($evaluations as $index => $eval) {
+                // Devoir 1 : soumis il y a 3 jours (déverrouillé > 48h)
+                // Examen : soumis il y a 6 heures (en attente < 48h)
+                if ($index === 0) {
+                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, dateSoumission: now()->subDays(3), archiver: $filiereIndex === 0);
+                } elseif ($index === 1 && $filiereIndex === 0) {
+                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, dateSoumission: now()->subHours(6), archiver: false);
                 }
-
-                $this->soumettreNotesDeTest($evaluation, $module, $qrCodeService, $secretaire, archiver: $indexFiliere === 0);
             }
         }
 
-        $this->command->info('GradeTrackingSeeder : étudiants, évaluations et soumissions de test créés.');
-        $this->command->info('Comptes : secretariat@cap.test / responsable@cap.test (mot de passe : password)');
+        $this->command->info('GradeTrackingSeeder : délégués, étudiants, évaluations et soumissions de test créés.');
+        $this->command->info('Comptes de test (mdp: password) :');
+        $this->command->info(' - secretariat@cap.test');
+        $this->command->info(' - responsable@cap.test');
+        $this->command->info(' - delegue.gl@cap.test, delegue.rt@cap.test, delegue.gsi@cap.test');
     }
 
     private function soumettreNotesDeTest(
-        Evaluation $evaluation,
+        Evaluation $eval,
         Module $module,
-        QrCodeService $qrCodeService,
-        User $secretaire,
+        QrCodeService $qrService,
+        User $secretariat,
+        $dateSoumission,
         bool $archiver
     ): void {
-        $submission = GradeSubmission::create([
-            'evaluation_id' => $evaluation->id,
-            'enseignant_id' => $module->enseignant_id,
-            'statut' => 'soumis',
-            'qr_hash' => '',
-            'date_soumission' => now()->subDays(2),
-        ]);
+        $submission = GradeSubmission::updateOrCreate(
+            ['evaluation_id' => $eval->id],
+            [
+                'enseignant_id' => $module->enseignant_id,
+                'statut' => 'soumis',
+                'qr_hash' => '',
+                'date_soumission' => $dateSoumission,
+            ]
+        );
 
         $etudiants = Etudiant::where('filiere_id', $module->filiere_id)->get();
 
         foreach ($etudiants as $etudiant) {
-            $estAbsent = fake()->boolean(10); // 10% d'absents, pour avoir un cas de test
+            $absent = fake()->boolean(10);
 
-            Note::create([
-                'evaluation_id' => $evaluation->id,
-                'etudiant_id' => $etudiant->id,
-                'valeur' => $estAbsent ? null : fake()->randomFloat(2, 5, 20),
-                'absent' => $estAbsent,
-                'verrouille' => true,
-            ]);
+            Note::updateOrCreate(
+                [
+                    'evaluation_id' => $eval->id,
+                    'etudiant_id' => $etudiant->id,
+                ],
+                [
+                    'valeur' => $absent ? null : fake()->randomFloat(2, 8, 19),
+                    'absent' => $absent,
+                    'verrouille' => true,
+                ]
+            );
         }
 
-        $hash = $qrCodeService->computeHash($submission, $evaluation->notes()->get());
-        $submission->update(['qr_hash' => $hash]);
+        $qrHash = $qrService->computeHash($submission, $eval->notes()->get());
+        $submission->update(['qr_hash' => $qrHash]);
 
         if ($archiver) {
             $submission->update([
                 'statut' => 'archive',
                 'date_archivage' => now()->subDay(),
-                'archive_par' => $secretaire->id,
+                'archive_par' => $secretariat->id,
             ]);
         }
-
-        // Pas de génération de PDF ici volontairement — pdf_path reste null
-        // pour les données de seed. Seul un vrai appel à submitNotes() en
-        // génère un (DomPDF à chaque exécution du seeder serait inutile ici).
     }
 }
