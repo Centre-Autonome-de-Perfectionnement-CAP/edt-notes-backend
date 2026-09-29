@@ -1,5 +1,4 @@
 <?php
-// database/seeders/GradeTrackingSeeder.php
 
 namespace Database\Seeders;
 
@@ -25,13 +24,6 @@ class GradeTrackingSeeder extends Seeder
             return;
         }
 
-        $modules->pluck('enseignant_id')->unique()->each(
-            fn ($id) => User::whereKey($id)->update([
-                'role' => 'enseignant',
-                'telephone' => '+229 97 ' . fake()->numerify('## ## ##'),
-            ])
-        );
-
         $secretariat = User::firstOrCreate(
             ['email' => 'secretariat@cap.test'],
             [
@@ -52,15 +44,11 @@ class GradeTrackingSeeder extends Seeder
             ]
         );
 
-        User::whereNull('telephone')->orWhere('telephone', '')->each(
-            fn ($u) => $u->update(['telephone' => '+229 97 ' . fake()->numerify('## ## ##')])
-        );
-
-        // 1. Étudiants & Délégué par filière
         $filieres = Filiere::all();
+        $nomsBeninois = ['Dossou', 'Houngbédji', 'Bio', 'Agbadomé', 'Orou', 'Agbogba', 'Gansè', 'Tossou', 'Kouassi', 'Zannou', 'Adéoti', 'Sossou', 'Gnonlonfoun', 'Koudjo', 'Agbo', 'Hessou', 'Codjo', 'Tidjani', 'Ahouansou', 'Soglo', 'Akindès'];
+        $prenomsBeninois = ['Sèna', 'Olabissi', 'Kwami', 'Mahougnon', 'Sèdjro', 'Ayaba', 'Kossi', 'Fifamè', 'Sènami', 'Gbêdonougbo', 'Nassirou', 'Tunde', 'Koffi', 'Yabo', 'Afi', 'Gildas', 'Romaric', 'Sêtondji', 'Sèvi', 'Noukpo', 'Jesugnon', 'Jesukpego'];
 
         foreach ($filieres as $filiere) {
-            // Créer un délégué (responsable de classe) pour la filière
             User::firstOrCreate(
                 ['email' => 'delegue.' . strtolower($filiere->code) . '@cap.test'],
                 [
@@ -68,23 +56,33 @@ class GradeTrackingSeeder extends Seeder
                     'password' => Hash::make('password'),
                     'role' => 'delegue',
                     'filiere_id' => $filiere->id,
-                    'telephone' => '+229 97 ' . fake()->numerify('## ## ##'),
+                    'telephone' => '+229 97 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
                 ]
             );
 
-            for ($i = 1; $i <= 6; $i++) {
+            $nbEtudiants = $filiere->code === 'GC' ? rand(30, 40) : rand(20, 28);
+            
+            for ($i = 1; $i <= $nbEtudiants; $i++) {
+                $nom = $nomsBeninois[array_rand($nomsBeninois)];
+                // 2 to 3 first names
+                $nbPrenoms = rand(2, 3);
+                $prenoms = [];
+                for ($j=0; $j<$nbPrenoms; $j++) {
+                    $prenoms[] = $prenomsBeninois[array_rand($prenomsBeninois)];
+                }
+                $prenomsStr = implode(' ', $prenoms);
+
                 Etudiant::firstOrCreate(
                     ['matricule' => sprintf('%s-%03d', $filiere->code, $i)],
                     [
                         'filiere_id' => $filiere->id,
-                        'nom' => fake()->lastName(),
-                        'prenoms' => fake()->firstName(),
+                        'nom' => $nom,
+                        'prenoms' => $prenomsStr,
                     ]
                 );
             }
         }
 
-        // 2. Évaluations — 2 par module (devoir1 + examen)
         foreach ($modules as $module) {
             Evaluation::firstOrCreate(
                 ['module_id' => $module->id, 'type' => 'devoir1'],
@@ -104,31 +102,18 @@ class GradeTrackingSeeder extends Seeder
             $evaluations = Evaluation::where('module_id', $module->id)->get();
 
             foreach ($evaluations as $index => $eval) {
-                // Devoir 1 : soumis il y a 3 jours (déverrouillé > 48h)
-                // Examen : soumis il y a 6 heures (en attente < 48h)
                 if ($index === 0) {
-                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, dateSoumission: now()->subDays(3), archiver: $filiereIndex === 0);
+                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, now()->subDays(3), $filiereIndex === 0);
                 } elseif ($index === 1 && $filiereIndex === 0) {
-                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, dateSoumission: now()->subHours(6), archiver: false);
+                    $this->soumettreNotesDeTest($eval, $module, $qrService, $secretariat, now()->subHours(6), false);
                 }
             }
         }
 
-        $this->command->info('GradeTrackingSeeder : délégués, étudiants, évaluations et soumissions de test créés.');
-        $this->command->info('Comptes de test (mdp: password) :');
-        $this->command->info(' - secretariat@cap.test');
-        $this->command->info(' - responsable@cap.test');
-        $this->command->info(' - delegue.gl@cap.test, delegue.rt@cap.test, delegue.gsi@cap.test');
+        $this->command->info('GradeTrackingSeeder : délégués, étudiants, évaluations et soumissions créés.');
     }
 
-    private function soumettreNotesDeTest(
-        Evaluation $eval,
-        Module $module,
-        QrCodeService $qrService,
-        User $secretariat,
-        $dateSoumission,
-        bool $archiver
-    ): void {
+    private function soumettreNotesDeTest(Evaluation $eval, Module $module, QrCodeService $qrService, User $secretariat, $dateSoumission, bool $archiver): void {
         $submission = GradeSubmission::updateOrCreate(
             ['evaluation_id' => $eval->id],
             [
@@ -142,30 +127,24 @@ class GradeTrackingSeeder extends Seeder
         $etudiants = Etudiant::where('filiere_id', $module->filiere_id)->get();
 
         foreach ($etudiants as $etudiant) {
-            $absent = fake()->boolean(10);
-
+            $absent = rand(1, 100) <= 5; // 5% absent
             Note::updateOrCreate(
                 [
                     'evaluation_id' => $eval->id,
                     'etudiant_id' => $etudiant->id,
                 ],
                 [
-                    'valeur' => $absent ? null : fake()->randomFloat(2, 8, 19),
+                    'valeur' => $absent ? null : rand(8, 20),
                     'absent' => $absent,
-                    'verrouille' => true,
                 ]
             );
         }
 
-        $qrHash = $qrService->computeHash($submission, $eval->notes()->get());
-        $submission->update(['qr_hash' => $qrHash]);
+        $notes = Note::where('evaluation_id', $eval->id)->get();
+        $submission->update(['qr_hash' => $qrService->computeHash($submission, $notes)]);
 
         if ($archiver) {
-            $submission->update([
-                'statut' => 'archive',
-                'date_archivage' => now()->subDay(),
-                'archive_par' => $secretariat->id,
-            ]);
+            $submission->update(['statut' => 'archive', 'date_archivage' => now(), 'archive_par' => $secretariat->id]);
         }
     }
 }

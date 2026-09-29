@@ -325,4 +325,33 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
             'data' => $modulesData,
         ]);
     }
+
+    /**
+     * POST /api/v1/grade-tracking/modules/{module}/evaluations
+     * Permet à un enseignant de créer une nouvelle évaluation pour son module.
+     */
+    public function storeEvaluation(Request $request, Module $module): JsonResponse
+    {
+        if ($module->enseignant_id !== $request->user()->id && $request->user()->role !== 'responsable_pedagogique') {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        $validated = $request->validate([
+            'type' => 'required|string',
+            'libelle' => 'required|string|max:255',
+            'date_prevue' => 'nullable|date',
+        ]);
+
+        $evaluation = \App\Modules\GradeTracking\Models\Evaluation::create([
+            'module_id' => $module->id,
+            'type' => $validated['type'],
+            'libelle' => $validated['libelle'],
+            'date_prevue' => $validated['date_prevue'] ?? now()->toDateString(),
+        ]);
+
+        return response()->json([
+            'message' => 'Évaluation créée avec succès',
+            'data' => $evaluation,
+        ], 201);
+    }
 }
