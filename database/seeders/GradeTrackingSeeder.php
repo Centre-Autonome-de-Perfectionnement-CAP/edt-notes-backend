@@ -52,6 +52,10 @@ class GradeTrackingSeeder extends Seeder
             ]
         );
 
+        User::whereNull('telephone')->orWhere('telephone', '')->each(
+            fn ($u) => $u->update(['telephone' => '+229 97 ' . fake()->numerify('## ## ##')])
+        );
+
         // 1. Étudiants & Délégué par filière
         $filieres = Filiere::all();
 

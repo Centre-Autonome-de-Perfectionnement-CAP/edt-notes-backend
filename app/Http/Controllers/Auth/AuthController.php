@@ -16,11 +16,19 @@ class AuthController extends Controller
             'password' => 'required|string',
         ]);
 
+        \Illuminate\Support\Facades\Log::info('Login attempt', [
+            'email' => $request->email,
+            'ip' => $request->ip(),
+        ]);
+
         if (!Auth::attempt($request->only('email', 'password'))) {
+            \Illuminate\Support\Facades\Log::warning('Login failed for: ' . $request->email);
             return response()->json([
                 'message' => 'Identifiants invalides'
             ], 422);
         }
+
+        \Illuminate\Support\Facades\Log::info('Login succeeded for: ' . $request->email);
 
         $user = User::where('email', $request->email)->first();
         $token = $user->createToken('mobile')->plainTextToken;
