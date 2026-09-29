@@ -11,12 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('evaluations', function (Blueprint $table) {
+        Schema::create('settings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('module_id')->constrained('modules')->cascadeOnDelete();
-            $table->enum('type', ['devoir', 'rattrapage']);
-            $table->string('libelle');
-            $table->date('date_prevue')->nullable();
+            $table->string('key')->unique();
+            $table->string('value')->nullable();
             $table->timestamps();
         });
     }
@@ -26,7 +24,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('evaluations');
+        Schema::dropIfExists('settings');
     }
 };
 

@@ -14,4 +14,5 @@ Route::prefix('v1/grade-tracking')->middleware('auth:sanctum')->group(function (
     Route::patch('/submissions/{submission}/archive', [GradeTrackingController::class, 'archive']);
     Route::get('/delegue/notes', [GradeTrackingController::class, 'delegueNotes']);
     Route::post('/modules/{module}/evaluations', [GradeTrackingController::class, 'storeEvaluation']);
+    Route::delete('/evaluations/{evaluation}', [GradeTrackingController::class, 'destroyEvaluation']);
 });

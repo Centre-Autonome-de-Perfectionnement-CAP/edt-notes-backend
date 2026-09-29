@@ -45,7 +45,7 @@ class TimetableSeeder extends Seeder
                     'name' => $prenom . ' ' . $nom,
                     'password' => Hash::make('password'),
                     'role' => 'enseignant',
-                    'telephone' => '+229 97 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
+                    'telephone' => '01' . rand(40, 99) . rand(10, 99) . rand(10, 99) . rand(10, 99),
                 ]
             ));
         }
@@ -83,7 +83,7 @@ class TimetableSeeder extends Seeder
 
         for ($i = 0; $i < 100; $i++) {
             $module = $modules->random();
-            $date = now()->addDays(rand(0, 14))->toDateString();
+            $dateObj = now()->addDays(rand(0, 14)); while ($dateObj->isWeekend()) { $dateObj->addDay(); } $date = $dateObj->toDateString();
             $heureDebut = sprintf('%02d:00', [8, 10, 14, 16][array_rand([8, 10, 14, 16])]);
             $heureFin = date('H:i', strtotime($heureDebut) + 7200);
 

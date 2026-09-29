@@ -30,7 +30,7 @@ class GradeTrackingSeeder extends Seeder
                 'name' => 'Secrétariat CAP',
                 'password' => Hash::make('password'),
                 'role' => 'secretariat',
-                'telephone' => '+229 97 00 00 00',
+                'telephone' => '0197000000',
             ]
         );
 
@@ -40,7 +40,7 @@ class GradeTrackingSeeder extends Seeder
                 'name' => 'Responsable Pédagogique',
                 'password' => Hash::make('password'),
                 'role' => 'responsable_pedagogique',
-                'telephone' => '+229 97 00 00 99',
+                'telephone' => '0197000099',
             ]
         );
 
@@ -56,7 +56,7 @@ class GradeTrackingSeeder extends Seeder
                     'password' => Hash::make('password'),
                     'role' => 'delegue',
                     'filiere_id' => $filiere->id,
-                    'telephone' => '+229 97 ' . rand(10, 99) . ' ' . rand(10, 99) . ' ' . rand(10, 99),
+                    'telephone' => '01' . rand(40, 99) . rand(10, 99) . rand(10, 99) . rand(10, 99),
                 ]
             );
 
@@ -85,12 +85,12 @@ class GradeTrackingSeeder extends Seeder
 
         foreach ($modules as $module) {
             Evaluation::firstOrCreate(
-                ['module_id' => $module->id, 'type' => 'devoir1'],
-                ['libelle' => 'Devoir 1 — ' . $module->intitule, 'date_prevue' => now()->subDays(10)]
+                ['module_id' => $module->id, 'type' => 'devoir'],
+                ['libelle' => 'Devoir — ' . $module->intitule, 'date_prevue' => now()->subDays(10)]
             );
             Evaluation::firstOrCreate(
-                ['module_id' => $module->id, 'type' => 'examen'],
-                ['libelle' => 'Examen — ' . $module->intitule, 'date_prevue' => now()->subDays(3)]
+                ['module_id' => $module->id, 'type' => 'rattrapage'],
+                ['libelle' => 'Rattrapage — ' . $module->intitule, 'date_prevue' => now()->subDays(3)]
             );
         }
 

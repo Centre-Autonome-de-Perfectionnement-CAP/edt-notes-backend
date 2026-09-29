@@ -21,6 +21,11 @@ class TimetableController extends Controller
      */
     public function filieres(): JsonResponse
     {
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if ($user && $user->role === 'enseignant') {
+            $filiereIds = \App\Modules\Timetable\Models\Module::where('enseignant_id', $user->id)->pluck('filiere_id')->unique();
+            return response()->json(['data' => Filiere::whereIn('id', $filiereIds)->get(['id', 'nom', 'code'])]);
+        }
         return response()->json(['data' => Filiere::all(['id', 'nom', 'code'])]);
     }
 
@@ -34,6 +39,11 @@ class TimetableController extends Controller
         }
 
         $query = Seance::forFiliere($filiere)->with(['module.filiere', 'enseignant']);
+
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if ($user && $user->role === 'enseignant') {
+            $query->where('enseignant_id', $user->id);
+        }
 
         if ($request->filled('date_debut')) {
             $query->where('date', '>=', $request->date('date_debut')->toDateString());
@@ -51,6 +61,11 @@ class TimetableController extends Controller
     public function allSeances(Request $request): JsonResponse
     {
         $query = Seance::with(['module.filiere', 'enseignant']);
+
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if ($user && $user->role === 'enseignant') {
+            $query->where('enseignant_id', $user->id);
+        }
 
         if ($request->filled('date_debut')) {
             $query->where('date', '>=', $request->date('date_debut')->toDateString());
@@ -88,7 +103,12 @@ class TimetableController extends Controller
      */
     public function modulesByFiliere(int $filiere): JsonResponse
     {
-        return response()->json(['data' => Module::where('filiere_id', $filiere)->get(['id', 'intitule'])]);
+        $query = Module::where('filiere_id', $filiere);
+        $user = \Illuminate\Support\Facades\Auth::user();
+        if ($user && $user->role === 'enseignant') {
+            $query->where('enseignant_id', $user->id);
+        }
+        return response()->json(['data' => $query->get()]);
     }
 
     /**

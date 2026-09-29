@@ -4,6 +4,7 @@
 namespace App\Modules\GradeTracking\Http\Controllers;
 
 use App\Models\Etudiant;
+use App\Models\Setting;
 use App\Models\Filiere;
 use App\Modules\GradeTracking\Http\Requests\SubmitNotesRequest;
 use App\Modules\GradeTracking\Models\Evaluation;
@@ -31,38 +32,80 @@ class GradeTrackingController extends Controller
 ) {}
 
     /**
-     * Liste des étudiants de la filière concernée par cette évaluation,
-     * utilisée côté mobile pour le matching OCR avant soumission.
+     * Liste des Ã©tudiants de la filiÃ¨re concernÃ©e par cette Ã©valuation,
+     * utilisÃ©e cÃ´tÃ© mobile pour le matching OCR avant soumission.
      */
+    private function getRosterForEvaluation(Evaluation $evaluation)
+    {
+        $etudiants = Etudiant::where('filiere_id', $evaluation->module->filiere_id)->orderBy('nom')->get();
+
+        if (strtolower($evaluation->type) === 'rattrapage') {
+            $devoirs = Evaluation::where('module_id', $evaluation->module_id)
+                ->where('id', '!=', $evaluation->id)
+                ->where('type', 'devoir')
+                ->with('notes')
+                ->get();
+            
+            if ($devoirs->isEmpty()) {
+                return collect([]);
+            }
+
+            $seuil = (float) (\App\Models\Setting::where('key', 'seuil_validation')->value('value') ?? 10);
+            $etudiantsEnRattrapage = collect();
+
+            foreach ($etudiants as $etudiant) {
+                $total = 0;
+                $count = 0;
+                foreach ($devoirs as $devoir) {
+                    $note = $devoir->notes->firstWhere('etudiant_id', $etudiant->id);
+                    if ($note && !$note->absent && $note->valeur !== null) {
+                        $total += $note->valeur;
+                        $count++;
+                    } elseif ($note && $note->absent) {
+                        $total += 0;
+                        $count++;
+                    }
+                }
+                
+                if ($count > 0) {
+                    $moyenne = $total / $count;
+                    if ($moyenne < $seuil) {
+                        $etudiantsEnRattrapage->push($etudiant);
+                    }
+                }
+            }
+            return $etudiantsEnRattrapage;
+        }
+
+        return $etudiants;
+    }
+
     public function roster(Evaluation $evaluation): JsonResponse
     {
-        $etudiants = Etudiant::where('filiere_id', $evaluation->module->filiere_id)
-            ->orderBy('nom')
-            ->get(['id', 'matricule', 'nom', 'prenoms']);
-
-        return response()->json(['data' => $etudiants]);
+        $etudiants = $this->getRosterForEvaluation($evaluation);
+        return response()->json(['data' => $etudiants->map->only(['id', 'matricule', 'nom', 'prenoms'])->values()]);
     }
 
     /**
-     * Soumission groupée des notes d'une évaluation. Verrouille, applique
-     * la règle "absent par défaut", et crée la soumission (sans PDF/QR
-     * pour l'instant — étapes suivantes).
+     * Soumission groupÃ©e des notes d'une Ã©valuation. Verrouille, applique
+     * la rÃ¨gle "absent par dÃ©faut", et crÃ©e la soumission (sans PDF/QR
+     * pour l'instant â€” Ã©tapes suivantes).
      */
     public function submitNotes(SubmitNotesRequest $request, Evaluation $evaluation): JsonResponse
     {
         if ($evaluation->module->enseignant_id !== $request->user()->id) {
             return response()->json([
-                'message' => "Vous n'êtes pas l'enseignant de ce module.",
+                'message' => "Vous n'Ãªtes pas l'enseignant de ce module.",
             ], 403);
         }
 
         if ($evaluation->gradeSubmission()->exists()) {
             return response()->json([
-                'message' => 'Les notes de cette évaluation sont déjà verrouillées.',
+                'message' => 'Les notes de cette Ã©valuation sont dÃ©jÃ  verrouillÃ©es.',
             ], 409);
         }
 
-        $rosterEtudiants = Etudiant::where('filiere_id', $evaluation->module->filiere_id)->get();
+        $rosterEtudiants = $this->getRosterForEvaluation($evaluation);
         $notesEnvoyees = collect($request->validated('notes'))->keyBy('etudiant_id');
 
         $submission = DB::transaction(function () use ($evaluation, $request, $rosterEtudiants, $notesEnvoyees) {
@@ -70,7 +113,7 @@ class GradeTrackingController extends Controller
                 'evaluation_id' => $evaluation->id,
                 'enseignant_id' => $request->user()->id,
                 'statut' => 'soumis',
-                'qr_hash' => '', // calculé juste après, une fois les notes créées
+                'qr_hash' => '', // calculÃ© juste aprÃ¨s, une fois les notes crÃ©Ã©es
                 'date_soumission' => now(),
             ]);
 
@@ -81,7 +124,7 @@ class GradeTrackingController extends Controller
                     'evaluation_id' => $evaluation->id,
                     'etudiant_id' => $etudiant->id,
                     'valeur' => $donnee['valeur'] ?? null,
-                    // Règle métier : étudiant omis du payload = absent par défaut
+                    // RÃ¨gle mÃ©tier : Ã©tudiant omis du payload = absent par dÃ©faut
                     'absent' => $donnee ? ($donnee['absent'] ?? false) : true,
                     'verrouille' => true,
                 ]);
@@ -103,7 +146,7 @@ class GradeTrackingController extends Controller
             event(new FiliereCompleteEvent($filiereId));
         }
 
-        // TODO (étape suivante) : génération du PDF récapitulatif, remplir submission->pdf_path
+        // TODO (Ã©tape suivante) : gÃ©nÃ©ration du PDF rÃ©capitulatif, remplir submission->pdf_path
 
         return response()->json($submission->fresh(), 201);
     }
@@ -134,13 +177,13 @@ public function downloadPdf(GradeSubmission $submission)
 public function archive(ArchiveSubmissionRequest $request, GradeSubmission $submission): JsonResponse
 {
     if ($submission->statut === 'archive') {
-        return response()->json(['message' => 'Cette soumission est déjà archivée.'], 409);
+        return response()->json(['message' => 'Cette soumission est dÃ©jÃ  archivÃ©e.'], 409);
     }
 
     $notes = $submission->evaluation->notes;
 
     if (! $this->qrCodeService->verify($submission, $notes, $request->validated('hash'))) {
-        return response()->json(['message' => 'QR code invalide ou falsifié.'], 422);
+        return response()->json(['message' => 'QR code invalide ou falsifiÃ©.'], 422);
     }
 
     $submission->update([
@@ -161,7 +204,7 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
         $data = $modules->map(function ($module) {
             $filiereNom = $module->filiere->nom ?? '';
             $cycleLibelle = $module->cycle->libelle ?? '';
-            $filiereAffichage = $cycleLibelle ? "{$filiereNom} — {$cycleLibelle}" : $filiereNom;
+            $filiereAffichage = $cycleLibelle ? "{$filiereNom} â€” {$cycleLibelle}" : $filiereNom;
 
             return [
                 'id' => $module->id,
@@ -175,12 +218,14 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                         'rattrapage' => 'Rattrapage',
                     ];
                     
-                    $libelle = $libelles[$evaluation->type] ?? ucfirst($evaluation->type);
+                    $libelle = $evaluation->titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
 
                     $hasSubmission = $evaluation->gradeSubmission !== null;
 
                     return [
                         'id' => $evaluation->id,
+                        'type' => $evaluation->type,
+                        'titre' => $evaluation->titre,
                         'libelle' => $libelle,
                         'statut' => $hasSubmission ? 'verrouille' : 'non_commence',
                         'submission_id' => $hasSubmission ? $evaluation->gradeSubmission->id : null,
@@ -194,8 +239,8 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
 
     /**
      * GET /api/v1/grade-tracking/delegue/notes
-     * Permet au responsable de classe (délégué) de consulter les notes des matières
-     * de sa filière avec application du délai de rétention de 2 jours (48h) post-dépôt.
+     * Permet au responsable de classe (dÃ©lÃ©guÃ©) de consulter les notes des matiÃ¨res
+     * de sa filiÃ¨re avec application du dÃ©lai de rÃ©tention de 2 jours (48h) post-dÃ©pÃ´t.
      */
     public function delegueNotes(Request $request): JsonResponse
     {
@@ -204,13 +249,13 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
 
         if (! $filiereId) {
             return response()->json([
-                'message' => 'Aucune filière associée à ce compte responsable de classe.',
+                'message' => 'Aucune filiÃ¨re associÃ©e Ã  ce compte responsable de classe.',
             ], 400);
         }
 
         $filiere = Filiere::find($filiereId);
         if (! $filiere) {
-            return response()->json(['message' => 'Filière introuvable.'], 404);
+            return response()->json(['message' => 'FiliÃ¨re introuvable.'], 404);
         }
 
         $modules = Module::where('filiere_id', $filiereId)
@@ -239,7 +284,7 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                         'examen' => 'Examen',
                         'rattrapage' => 'Rattrapage',
                     ];
-                    $libelle = $libelles[$evaluation->type] ?? ucfirst($evaluation->type);
+                    $libelle = $evaluation->titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
 
                     if (! $submission) {
                         return [
@@ -247,7 +292,7 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                             'type' => $evaluation->type,
                             'libelle' => $libelle,
                             'statut' => 'non_soumis',
-                            'libelle_statut' => 'Notes non encore renseignées par l\'enseignant',
+                            'libelle_statut' => 'Notes non encore renseignÃ©es par l\'enseignant',
                             'delai_ecoule' => false,
                             'date_soumission' => null,
                             'date_ouverture' => null,
@@ -268,7 +313,7 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                             'type' => $evaluation->type,
                             'libelle' => $libelle,
                             'statut' => 'en_attente_delai',
-                            'libelle_statut' => 'En attente du délai de 2 jours post-dépôt',
+                            'libelle_statut' => 'En attente du dÃ©lai de 2 jours post-dÃ©pÃ´t',
                             'delai_ecoule' => false,
                             'date_soumission' => $dateSoumission->toIso8601String(),
                             'date_ouverture' => $dateOuverture->toIso8601String(),
@@ -304,7 +349,7 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                         'type' => $evaluation->type,
                         'libelle' => $libelle,
                         'statut' => 'disponible',
-                        'libelle_statut' => 'Notes publiées et consultables',
+                        'libelle_statut' => 'Notes publiÃ©es et consultables',
                         'delai_ecoule' => true,
                         'date_soumission' => $dateSoumission->toIso8601String(),
                         'date_ouverture' => $dateOuverture->toIso8601String(),
@@ -328,12 +373,12 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
 
     /**
      * POST /api/v1/grade-tracking/modules/{module}/evaluations
-     * Permet à un enseignant de créer une nouvelle évaluation pour son module.
+     * Permet Ã  un enseignant de crÃ©er une nouvelle Ã©valuation pour son module.
      */
     public function storeEvaluation(Request $request, Module $module): JsonResponse
     {
         if ($module->enseignant_id !== $request->user()->id && $request->user()->role !== 'responsable_pedagogique') {
-            return response()->json(['message' => 'Non autorisé.'], 403);
+            return response()->json(['message' => 'Non autorisÃ©.'], 403);
         }
 
         $validated = $request->validate([
@@ -350,8 +395,26 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
         ]);
 
         return response()->json([
-            'message' => 'Évaluation créée avec succès',
+            'message' => 'Ã‰valuation crÃ©Ã©e avec succÃ¨s',
             'data' => $evaluation,
         ], 201);
+    }
+    /**
+     * DELETE /api/v1/grade-tracking/evaluations/{evaluation}
+     * Permet à un enseignant de supprimer une évaluation non verrouillée.
+     */
+    public function destroyEvaluation(Request $request, Evaluation $evaluation): JsonResponse
+    {
+        if ($evaluation->module->enseignant_id !== $request->user()->id && $request->user()->role !== 'responsable_pedagogique') {
+            return response()->json(['message' => 'Non autorisé.'], 403);
+        }
+
+        if ($evaluation->statut === 'verrouille' || $evaluation->gradeSubmission()->exists()) {
+            return response()->json(['message' => 'Impossible de supprimer une évaluation avec des notes soumises ou verrouillée.'], 409);
+        }
+
+        $evaluation->delete();
+
+        return response()->json(['message' => 'Évaluation supprimée avec succès']);
     }
 }
