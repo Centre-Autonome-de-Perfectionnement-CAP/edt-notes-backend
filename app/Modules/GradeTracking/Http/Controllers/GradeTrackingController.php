@@ -203,13 +203,14 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
 
         $data = $modules->map(function ($module) {
             $filiereNom = $module->filiere->nom ?? '';
-            $cycleLibelle = $module->cycle->libelle ?? '';
-            $filiereAffichage = $cycleLibelle ? "{$filiereNom} â€” {$cycleLibelle}" : $filiereNom;
+            $filiereCode = $module->filiere->code ?? '';
+            $filiereAffichage = $filiereNom;
 
             return [
                 'id' => $module->id,
                 'nom' => $module->intitule,
                 'filiere' => $filiereAffichage,
+                'filiere_code' => strtolower($filiereCode),
                 'evaluations' => $module->evaluations->map(function ($evaluation) {
                     $libelles = [
                         'devoir1' => 'Devoir 1',
@@ -218,14 +219,15 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                         'rattrapage' => 'Rattrapage',
                     ];
                     
-                    $libelle = $evaluation->titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
+                    $titre = $evaluation->libelle;
+                    $libelle = $titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
 
                     $hasSubmission = $evaluation->gradeSubmission !== null;
 
                     return [
                         'id' => $evaluation->id,
                         'type' => $evaluation->type,
-                        'titre' => $evaluation->titre,
+                        'titre' => $titre,
                         'libelle' => $libelle,
                         'statut' => $hasSubmission ? 'verrouille' : 'non_commence',
                         'submission_id' => $hasSubmission ? $evaluation->gradeSubmission->id : null,
@@ -284,7 +286,8 @@ public function archive(ArchiveSubmissionRequest $request, GradeSubmission $subm
                         'examen' => 'Examen',
                         'rattrapage' => 'Rattrapage',
                     ];
-                    $libelle = $evaluation->titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
+                    $titre = $evaluation->libelle;
+                    $libelle = $titre ?: ($libelles[$evaluation->type] ?? ucfirst($evaluation->type));
 
                     if (! $submission) {
                         return [
